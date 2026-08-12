@@ -1,0 +1,1398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stale Inventory Sales Monitor — ERE Sneakers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#14171c;
+    --panel:#1b1f26;
+    --panel2:#20242c;
+    --border:#2a2f38;
+    --text:#e8e5de;
+    --muted:#8b909c;
+    --muted2:#5f6470;
+    --walnut:#a06a45;
+    --current:#3d4552;
+    --olive:#78805a;
+    --amber:#c98a3e;
+    --rust:#b8552f;
+    --maroon:#7a3226;
+    --mono:'IBM Plex Mono', ui-monospace, monospace;
+    --sans:'Inter', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+  .wrap{max-width:1280px;margin:0 auto;padding:32px 28px 80px;}
+
+  /* Header */
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:16px;
+    border-bottom:1px solid var(--border);
+    padding-bottom:20px;
+    margin-bottom:28px;
+  }
+  .title-block .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--muted2);
+    margin-bottom:6px;
+  }
+  h1{
+    font-family:var(--mono);
+    font-weight:600;
+    font-size:26px;
+    margin:0;
+    letter-spacing:-0.01em;
+  }
+  .subtitle{
+    color:var(--muted);
+    font-size:13px;
+    margin-top:6px;
+  }
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .range-toggle{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+  .range-toggle button{
+    background:var(--panel);
+    color:var(--muted);
+    border:none;
+    padding:8px 14px;
+    font-family:var(--mono);
+    font-size:12px;
+    cursor:pointer;
+    border-right:1px solid var(--border);
+  }
+  .range-toggle button:last-child{border-right:none;}
+  .range-toggle button.active{background:var(--walnut);color:#fff;}
+  .range-toggle button:hover:not(.active){color:var(--text);}
+  #lastUpdated{font-family:var(--mono);font-size:11px;color:var(--muted2);}
+
+  /* Status / empty state */
+  #statusMsg{
+    display:none;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-left:3px solid var(--rust);
+    padding:14px 18px;
+    border-radius:6px;
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:24px;
+  }
+
+  /* KPI row */
+  .kpi-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(150px,1fr));
+    gap:12px;
+    margin-bottom:32px;
+  }
+  .kpi{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:16px 18px;
+  }
+  .kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted2);font-family:var(--mono);}
+  .kpi .value{font-family:var(--mono);font-size:24px;font-weight:600;margin-top:6px;}
+  .kpi .value.warn{color:var(--rust);}
+
+  section{margin-bottom:36px;}
+  .section-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:14px;
+  }
+  .section-head h2{
+    font-family:var(--mono);
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--muted);
+    margin:0;
+    font-weight:600;
+  }
+  select{
+    background:var(--panel);
+    color:var(--text);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:6px 10px;
+    font-family:var(--mono);
+    font-size:12px;
+  }
+
+  /* Platform cards */
+  .platform-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(270px,1fr));
+    gap:14px;
+  }
+  .platform-card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:18px 20px;
+  }
+  .platform-card .pname{
+    font-family:var(--mono);
+    font-weight:600;
+    font-size:15px;
+  }
+  .platform-card .pmeta{
+    display:flex;
+    justify-content:space-between;
+    margin-top:12px;
+    font-size:13px;
+  }
+  .platform-card .pmeta .n{font-family:var(--mono);font-size:19px;font-weight:600;}
+  .platform-card .pmeta .l{color:var(--muted2);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
+
+  /* aging strip - signature element */
+  .aging-strip{margin-top:16px;}
+  .strip-bar{
+    display:flex;
+    height:10px;
+    border-radius:3px;
+    overflow:hidden;
+    background:var(--border);
+  }
+  .strip-bar span{height:100%;}
+  .strip-labels{
+    display:flex;
+    justify-content:space-between;
+    margin-top:6px;
+    font-family:var(--mono);
+    font-size:9.5px;
+    color:var(--muted2);
+    letter-spacing:.03em;
+  }
+  .strip-labels span{display:flex;align-items:center;gap:4px;}
+  .dot{width:6px;height:6px;border-radius:50%;display:inline-block;}
+
+  /* SVG trend charts */
+  .chart-panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:20px;
+  }
+  .chart-title{
+    font-family:var(--mono);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted2);
+    margin-bottom:12px;
+  }
+  .chart-panel svg{width:100%;height:auto;display:block;}
+  .chart-legend{
+    display:flex;
+    flex-wrap:wrap;
+    gap:12px 18px;
+    margin-top:12px;
+  }
+  .chart-legend .item{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted2);
+  }
+  .chart-legend .swatch{width:9px;height:9px;border-radius:2px;display:inline-block;}
+  .chart-empty{color:var(--muted2);font-size:13px;padding:16px 0;}
+
+  /* Tables */
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--border);}
+  th:first-child,td:first-child{text-align:left;}
+  th{
+    font-family:var(--mono);
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted2);
+    font-weight:500;
+    cursor:pointer;
+    user-select:none;
+  }
+  th:hover{color:var(--text);}
+  tbody tr:hover{background:var(--panel2);}
+  .table-panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:6px 14px;
+    overflow-x:auto;
+  }
+  .bucket-pill{
+    font-family:var(--mono);
+    font-size:10.5px;
+    padding:2px 7px;
+    border-radius:10px;
+    display:inline-block;
+  }
+  /* Upload / data management panel */
+  .upload-panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:20px;
+  }
+  .upload-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(220px,1fr));
+    gap:14px;
+  }
+  .file-field code{
+    font-family:var(--mono);
+    background:var(--panel2);
+    padding:1px 4px;
+    border-radius:3px;
+    color:var(--text);
+    font-size:10px;
+  }
+  .file-field label{
+    display:block;
+    font-family:var(--mono);
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted2);
+    margin-bottom:6px;
+  }
+  .file-field input[type=file]{
+    width:100%;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:8px;
+    color:var(--text);
+    font-size:12px;
+    font-family:var(--sans);
+  }
+  .file-field input[type=file]::file-selector-button{
+    background:var(--border);
+    color:var(--text);
+    border:none;
+    border-radius:4px;
+    padding:5px 10px;
+    margin-right:8px;
+    font-family:var(--mono);
+    font-size:11px;
+    cursor:pointer;
+  }
+  .upload-actions{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-top:16px;
+    flex-wrap:wrap;
+  }
+  button.btn{
+    background:var(--walnut);
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    padding:9px 16px;
+    font-family:var(--mono);
+    font-size:12px;
+    cursor:pointer;
+    font-weight:600;
+  }
+  button.btn:hover{opacity:0.9;}
+  button.btn.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--border);}
+  button.btn.danger{background:transparent;color:var(--rust);border:1px solid var(--rust);}
+  button.btn.danger:hover{background:var(--rust);color:#fff;}
+  #uploadStatus{font-family:var(--mono);font-size:12px;color:var(--muted);}
+  #uploadStatus.ok{color:var(--olive);}
+  #uploadStatus.err{color:var(--rust);}
+  #batchStatus{font-family:var(--mono);font-size:12px;color:var(--muted);}
+  #batchStatus.ok{color:var(--olive);}
+  #batchStatus.err{color:var(--rust);}
+  .data-bar{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:14px 18px;
+  }
+  .data-bar #dataSummary{font-family:var(--mono);font-size:12px;color:var(--muted2);margin-left:auto;}
+  input[type=file]{color:var(--text);}
+
+  /* Compare periods */
+  .compare-controls{
+    display:flex;
+    gap:24px;
+    flex-wrap:wrap;
+    margin-bottom:18px;
+  }
+  .compare-col{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:var(--mono);
+    font-size:11px;
+    color:var(--muted2);
+  }
+  .compare-col .compare-label{
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    padding:3px 8px;
+    border-radius:4px;
+    font-weight:600;
+  }
+  .compare-col.a .compare-label{background:var(--walnut);color:#fff;}
+  .compare-col.b .compare-label{background:var(--panel2);color:var(--text);border:1px solid var(--border);}
+  .compare-kpi-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(180px,1fr));
+    gap:12px;
+    margin-bottom:18px;
+  }
+  .compare-kpi{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:14px 16px;
+  }
+  .compare-kpi .label{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2);font-family:var(--mono);}
+  .compare-kpi .row{display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;}
+  .compare-kpi .val{font-family:var(--mono);font-size:18px;font-weight:600;}
+  .compare-kpi .delta{font-family:var(--mono);font-size:12px;}
+  .delta.pos{color:var(--olive);}
+  .delta.neg{color:var(--rust);}
+  .delta.flat{color:var(--muted2);}
+
+  footer{
+    margin-top:48px;
+    padding-top:20px;
+    border-top:1px solid var(--border);
+    color:var(--muted2);
+    font-size:11.5px;
+    font-family:var(--mono);
+    line-height:1.7;
+  }
+  @media (max-width:640px){
+    .wrap{padding:20px 16px 60px;}
+    h1{font-size:20px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <div class="eyebrow">ERE Sneakers · Operations</div>
+      <h1>Stale Inventory Sales Monitor</h1>
+      <div class="subtitle">Units sold from 31+ day aged stock, by platform. FIFO buckets: 31–60 Monitor · 61–90 Action · 91–120 Deeper · 120+ Liquidate. Everything runs in this browser — no repo folders, no server.</div>
+    </div>
+    <div class="controls">
+      <div class="range-toggle" id="rangeToggle">
+        <button data-range="1">Today</button>
+        <button data-range="7" class="active">7d</button>
+      </div>
+      <div id="lastUpdated">—</div>
+    </div>
+  </header>
+
+  <div id="statusMsg"></div>
+
+  <section>
+    <div class="section-head"><h2>Add today's exports</h2></div>
+    <div class="upload-panel">
+      <div class="upload-row">
+        <div class="file-field">
+          <label for="fileDaily">Daily sales report (.xlsm)</label>
+          <input type="file" id="fileDaily" accept=".xlsm,.xlsx">
+        </div>
+        <div class="file-field">
+          <label for="fileStale">Stale product list (.xlsx)</label>
+          <input type="file" id="fileStale" accept=".xlsx">
+        </div>
+        <div class="file-field">
+          <label for="fileInventory">Available inventory (.csv)</label>
+          <input type="file" id="fileInventory" accept=".csv">
+        </div>
+      </div>
+      <div class="upload-actions">
+        <button class="btn" id="processBtn">Process &amp; save</button>
+        <span id="uploadStatus"></span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Batch upload (many days at once)</h2></div>
+    <div class="upload-panel">
+      <div class="file-field">
+        <label for="batchFiles">Select all files at once — filenames must be named <code>YYYY-MM-DD_daily.xlsm</code>, <code>YYYY-MM-DD_stale.xlsx</code>, <code>YYYY-MM-DD_inventory.csv</code></label>
+        <input type="file" id="batchFiles" accept=".xlsm,.xlsx,.csv" multiple>
+      </div>
+      <div class="upload-actions">
+        <button class="btn" id="batchProcessBtn">Process batch</button>
+        <span id="batchStatus"></span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="data-bar">
+      <button class="btn secondary" id="exportBtn">Export backup (.csv)</button>
+      <button class="btn secondary" id="importBtn">Import backup (.csv)</button>
+      <input type="file" id="importFile" accept=".csv" style="display:none">
+      <button class="btn danger" id="clearBtn">Clear all data</button>
+      <span id="dataSummary"></span>
+    </div>
+  </section>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <section>
+    <div class="section-head"><h2>By platform</h2></div>
+    <div class="platform-grid" id="platformGrid"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Compare periods</h2></div>
+    <div class="compare-controls">
+      <div class="compare-col a">
+        <span class="compare-label">A</span>
+        <select id="compareDateA"></select>
+        <select id="compareTypeA">
+          <option value="day">Day</option>
+          <option value="7d">7 days ending</option>
+        </select>
+      </div>
+      <div class="compare-col b">
+        <span class="compare-label">B</span>
+        <select id="compareDateB"></select>
+        <select id="compareTypeB">
+          <option value="day">Day</option>
+          <option value="7d">7 days ending</option>
+        </select>
+      </div>
+    </div>
+    <div id="compareBody"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Trends over time</h2></div>
+    <div class="subtitle" style="margin:-6px 0 14px;">Full history, independent of the Today/7d toggle above.</div>
+    <div class="chart-panel" style="margin-bottom:14px;">
+      <div class="chart-title">Daily stale units sold by platform</div>
+      <div id="trendLineChart"></div>
+      <div id="trendLineLegend" class="chart-legend"></div>
+    </div>
+    <div class="chart-panel">
+      <div class="chart-title">Daily units sold by bucket</div>
+      <div id="bucketMixChart"></div>
+      <div id="bucketMixLegend" class="chart-legend"></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Bucket breakdown (units sold, selected range)</h2></div>
+    <div class="table-panel">
+      <table id="bucketTable">
+        <thead>
+          <tr><th>Platform</th><th>Monitor 31–60</th><th>Action 61–90</th><th>Deeper 91–120</th><th>Liquidate 120+</th><th>Total</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>SKU drilldown</h2>
+      <select id="platformFilter"><option value="ALL">All platforms</option></select>
+    </div>
+    <div class="table-panel">
+      <table id="skuTable">
+        <thead>
+          <tr>
+            <th data-key="platform">Platform</th>
+            <th data-key="brand">Brand</th>
+            <th data-key="base_sku">SKU</th>
+            <th data-key="bucket">Bucket</th>
+            <th data-key="days_since_received">Days aged</th>
+            <th data-key="units_sold">Units sold</th>
+            <th data-key="revenue">Revenue</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Data lives in this browser's local storage — nothing is sent anywhere, and nothing needs to be pushed to a repo for daily use. Use "Export backup" regularly, since local storage can be cleared by the browser or lost if you switch machines; "Import backup" restores it.<br>
+    A unit only counts as stale here if its base SKU is on that day's stale product list. TikTok Shop is reported in units only (no dollar figures) per standing fee-model rule. Buckets are computed from days_since_received — 0–30 is current stock and is excluded from all totals on this page.
+  </footer>
+
+</div>
+
+<script>
+const BUCKET_DEFS = [
+  {key:'MONITOR',   label:'Monitor 31–60',   min:31,  max:60,  color:'var(--olive)'},
+  {key:'ACTION',    label:'Action 61–90',    min:61,  max:90,  color:'var(--amber)'},
+  {key:'DEEPER',    label:'Deeper 91–120',   min:91,  max:120, color:'var(--rust)'},
+  {key:'LIQUIDATE', label:'Liquidate 120+',  min:121, max:Infinity, color:'var(--maroon)'}
+];
+const BUCKET_COLOR_HEX = { MONITOR:'#78805a', ACTION:'#c98a3e', DEEPER:'#b8552f', LIQUIDATE:'#7a3226' };
+const PLATFORM_COLORS = {
+  'Amazon':'#e2a33e','eBay':'#7ea6c9','TikTok Shop':'#c96b8a','StockX':'#8fae7a',
+  'GOAT':'#c98a3e','Stadium Goods':'#a08cc9','Temu':'#d97b5a','Shopify':'#6fb8a8'
+};
+function bucketFor(days){
+  for(const b of BUCKET_DEFS){ if(days>=b.min && days<=b.max) return b.key; }
+  return null; // current stock, 0-30
+}
+function fmtMoney(n){ return '$' + Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
+function fmtDate(d){ return d; }
+
+let currentRange = 7;
+let skuSort = {key:'units_sold', dir:'desc'};
+let compareAUserSet = false;
+let compareBUserSet = false;
+
+const PLATFORM_SHEET_MAP = {
+  'eBay Raw': 'eBay',
+  'Amazon Raw': 'Amazon',
+  'Tiktok Raw': 'TikTok Shop',
+  'StockX Raw': 'StockX',
+  'GOAT Raw': 'GOAT',
+  'Stadium Goods Raw': 'Stadium Goods',
+  'Temu Raw': 'Temu',
+  'Shopify Raw': 'Shopify',
+};
+const BASE_SKU_SUFFIX_RE = /-[0-9]{1,2}(\.[05])?[A-Za-z]?$/;
+function stripSizeSuffix(sku){ return typeof sku === 'string' ? sku.replace(BASE_SKU_SUFFIX_RE, '') : sku; }
+
+const STORAGE_KEY = 'stale_monitor_history_v1';
+let listenersAttached = false;
+
+function showStatus(msg){
+  const el = document.getElementById('statusMsg');
+  el.style.display = 'block';
+  el.textContent = msg;
+}
+function hideStatus(){
+  document.getElementById('statusMsg').style.display = 'none';
+}
+
+function loadHistory(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){
+    console.error('Could not read local storage', e);
+    return [];
+  }
+}
+function saveHistory(rows){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+}
+
+function setUploadStatus(msg, isErr, isOk){
+  const el = document.getElementById('uploadStatus');
+  el.textContent = msg;
+  el.className = isErr ? 'err' : (isOk ? 'ok' : '');
+}
+
+function readAsArrayBuffer(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('Could not read ' + file.name));
+    r.readAsArrayBuffer(file);
+  });
+}
+function readAsText(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('Could not read ' + file.name));
+    r.readAsText(file);
+  });
+}
+
+async function processOneDay(dailyFile, staleFile, invFile){
+  const [dailyBuf, staleBuf, invText] = await Promise.all([
+    readAsArrayBuffer(dailyFile), readAsArrayBuffer(staleFile), readAsText(invFile)
+  ]);
+  const dailyWb = XLSX.read(dailyBuf, {type:'array', cellDates:true});
+  const staleWb = XLSX.read(staleBuf, {type:'array', cellDates:true});
+
+  const staleList = parseStaleList(staleWb);
+  const costBook = parseCostBook(dailyWb);
+  const brandLookup = parseBrandLookup(invText);
+  const reportDate = parseReportDate(dailyWb);
+  if(!reportDate) throw new Error('Could not find "Date Report Coverage:" in the daily sales report');
+
+  const dayRows = buildDayRows(dailyWb, staleList, costBook, brandLookup, reportDate);
+  return {reportDate, dayRows};
+}
+
+async function processUpload(){
+  const dailyFile = document.getElementById('fileDaily').files[0];
+  const staleFile = document.getElementById('fileStale').files[0];
+  const invFile = document.getElementById('fileInventory').files[0];
+  if(!dailyFile || !staleFile || !invFile){
+    setUploadStatus('Select all three files first.', true);
+    return;
+  }
+  setUploadStatus('Processing…');
+  try{
+    const {reportDate, dayRows} = await processOneDay(dailyFile, staleFile, invFile);
+    RAW = RAW.filter(r => r.date !== reportDate).concat(dayRows);
+    saveHistory(RAW);
+    setUploadStatus(`Saved ${dayRows.length} stale-sale row(s) for ${reportDate}.`, false, true);
+    document.getElementById('fileDaily').value = '';
+    document.getElementById('fileStale').value = '';
+    document.getElementById('fileInventory').value = '';
+    refreshDashboard();
+  }catch(e){
+    console.error(e);
+    setUploadStatus('Error: ' + e.message, true);
+  }
+}
+
+function setBatchStatus(msg, isErr, isOk){
+  const el = document.getElementById('batchStatus');
+  el.textContent = msg;
+  el.className = isErr ? 'err' : (isOk ? 'ok' : '');
+}
+
+async function processBatch(){
+  const files = Array.from(document.getElementById('batchFiles').files);
+  if(files.length === 0){
+    setBatchStatus('Select files first.', true);
+    return;
+  }
+
+  const FILENAME_RE = /^(\d{4}-\d{2}-\d{2})_(daily|stale|inventory)\.(xlsm|xlsx|csv)$/i;
+  const groups = {}; // date -> {daily, stale, inventory}
+  const unmatched = [];
+
+  files.forEach(f => {
+    const m = f.name.match(FILENAME_RE);
+    if(!m){ unmatched.push(f.name); return; }
+    const [, date, kind] = m;
+    if(!groups[date]) groups[date] = {};
+    groups[date][kind] = f;
+  });
+
+  const dates = Object.keys(groups).sort();
+  const complete = dates.filter(d => groups[d].daily && groups[d].stale && groups[d].inventory);
+  const incomplete = dates.filter(d => !(groups[d].daily && groups[d].stale && groups[d].inventory));
+
+  if(complete.length === 0){
+    setBatchStatus('No complete day found. Filenames must match YYYY-MM-DD_daily.xlsm / _stale.xlsx / _inventory.csv.', true);
+    return;
+  }
+
+  setBatchStatus(`Processing ${complete.length} day(s)…`);
+  let processed = 0;
+  const errors = [];
+  for(const date of complete){
+    try{
+      const g = groups[date];
+      const {reportDate, dayRows} = await processOneDay(g.daily, g.stale, g.inventory);
+      RAW = RAW.filter(r => r.date !== reportDate).concat(dayRows);
+      processed++;
+    }catch(e){
+      console.error('Failed to process ' + date, e);
+      errors.push(date + ': ' + e.message);
+    }
+  }
+  saveHistory(RAW);
+
+  let msg = `Processed ${processed} of ${complete.length} day(s).`;
+  if(incomplete.length) msg += ` Skipped ${incomplete.length} incomplete: ${incomplete.join(', ')}.`;
+  if(unmatched.length) msg += ` ${unmatched.length} file(s) didn't match the naming pattern.`;
+  if(errors.length) msg += ` Errors — ${errors.join(' | ')}`;
+  setBatchStatus(msg, errors.length > 0 || incomplete.length > 0, errors.length === 0 && incomplete.length === 0);
+
+  document.getElementById('batchFiles').value = '';
+  refreshDashboard();
+}
+
+function exportBackup(){
+  const fields = ['date','platform','brand','base_sku','days_since_received','bucket','units_sold','revenue','cost'];
+  const lines = [fields.join(',')];
+  RAW.forEach(r=>{
+    lines.push(fields.map(f=>{
+      const v = r[f];
+      if(v == null) return '';
+      const s = String(v);
+      return s.includes(',') ? `"${s}"` : s;
+    }).join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const lastDate = [...new Set(RAW.map(r=>r.date))].sort().pop() || 'backup';
+  a.href = url;
+  a.download = `stale_sales_backup_${lastDate}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function importBackup(file){
+  setUploadStatus('Importing…');
+  try{
+    const text = await readAsText(file);
+    const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+    if(parsed.errors && parsed.errors.length){
+      console.warn('CSV parse warnings:', parsed.errors);
+    }
+    const imported = parsed.data.map(r => ({
+      date: r.date,
+      platform: r.platform,
+      brand: r.brand || '',
+      base_sku: r.base_sku,
+      days_since_received: Number(r.days_since_received) || 0,
+      bucket: r.bucket || bucketFor(Number(r.days_since_received)),
+      units_sold: Number(r.units_sold) || 0,
+      revenue: r.revenue === '' || r.revenue == null ? null : Number(r.revenue),
+      cost: r.cost === '' || r.cost == null ? null : Number(r.cost),
+    })).filter(r => r.date && r.platform && r.base_sku);
+
+    if(imported.length === 0) throw new Error('No valid rows found in that file — check it matches the exported backup format.');
+
+    const importedDates = new Set(imported.map(r=>r.date));
+    RAW = RAW.filter(r => !importedDates.has(r.date)).concat(imported);
+    saveHistory(RAW);
+    setUploadStatus(`Imported ${imported.length} row(s) across ${importedDates.size} date(s).`, false, true);
+    refreshDashboard();
+  }catch(e){
+    console.error(e);
+    setUploadStatus('Import error: ' + e.message, true);
+  }
+}
+
+function clearAllData(){
+  if(!confirm('Delete all stored stale-sale history from this browser? This cannot be undone (export a backup first if you want one).')) return;
+  RAW = [];
+  localStorage.removeItem(STORAGE_KEY);
+  refreshDashboard();
+  setUploadStatus('All local data cleared.', false, true);
+}
+
+let RAW = loadHistory();
+
+if(RAW.length === 0){
+  showStatus('No data yet — process your first day\'s exports below to get started.');
+}
+
+document.getElementById('processBtn').addEventListener('click', processUpload);
+document.getElementById('batchProcessBtn').addEventListener('click', processBatch);
+document.getElementById('exportBtn').addEventListener('click', exportBackup);
+document.getElementById('clearBtn').addEventListener('click', clearAllData);
+document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFile').click());
+document.getElementById('importFile').addEventListener('change', (e) => {
+  if(e.target.files[0]) importBackup(e.target.files[0]);
+  e.target.value = '';
+});
+
+refreshDashboard();
+
+// Base SKU -> {days_since_received, bucket}, from the "All Base SKUs" sheet of the stale list export
+function parseStaleList(staleWb){
+  const ws = staleWb.Sheets['All Base SKUs'];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
+  const headerIdx = rows.findIndex(r => r[0] === 'Base SKU');
+  if(headerIdx === -1) throw new Error('"All Base SKUs" sheet missing expected header row');
+  const header = rows[headerIdx];
+  const col = {};
+  header.forEach((name,i) => { if(name) col[name] = i; });
+
+  const stale = {};
+  for(let i = headerIdx+1; i < rows.length; i++){
+    const r = rows[i];
+    if(!r || r[0] == null) break;
+    const baseSku = r[col['Base SKU']];
+    const dsr = r[col['Days Since Received']];
+    const bucket = bucketFor(Number(dsr));
+    if(bucket === null) continue; // current stock (0-30 days), not stale
+    stale[baseSku] = {days_since_received: Number(dsr), bucket};
+  }
+  return stale;
+}
+
+// Base SKU -> avg unit cost, from the Cost Book sheet of the daily workbook (fallback for missing COGS)
+function parseCostBook(dailyWb){
+  const sheetName = dailyWb.SheetNames.find(n => n.trim() === 'Cost Book');
+  const costs = {};
+  if(!sheetName) return costs;
+  const ws = dailyWb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
+  const header = rows[0];
+  const col = {};
+  header.forEach((name,i) => { if(name) col[name] = i; });
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r[col['Base SKU']] == null) continue;
+    costs[r[col['Base SKU']]] = r[col['Avg Unit Cost']];
+  }
+  return costs;
+}
+
+// base_sku -> brand, from the available-inventory CSV export
+function parseBrandLookup(invText){
+  const parsed = Papa.parse(invText, {header:true, skipEmptyLines:true});
+  const lookup = {};
+  parsed.data.forEach(r => {
+    if(!r.SKU || !r.Brand) return;
+    const baseSku = stripSizeSuffix(r.SKU);
+    if(!(baseSku in lookup)) lookup[baseSku] = r.Brand;
+  });
+  return lookup;
+}
+
+// Reads the "Date Report Coverage:" cell from the Daily Combined Report sheet
+function parseReportDate(dailyWb){
+  const ws = dailyWb.Sheets['Daily Combined Report'];
+  if(!ws) return null;
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
+  for(const row of rows.slice(0,6)){
+    const idx = row.findIndex(c => c === 'Date Report Coverage:');
+    if(idx === -1) continue;
+    for(let i=idx+1;i<row.length;i++){
+      if(row[i] instanceof Date){
+        const d = row[i];
+        return d.getUTCFullYear() + '-' + String(d.getUTCMonth()+1).padStart(2,'0') + '-' + String(d.getUTCDate()).padStart(2,'0');
+      }
+    }
+  }
+  return null;
+}
+
+// Walks each platform's Raw sheet; a unit only becomes a row here if its base SKU is on the stale list
+function buildDayRows(dailyWb, staleList, costBook, brandLookup, reportDate){
+  const out = [];
+  for(const [sheetName, platform] of Object.entries(PLATFORM_SHEET_MAP)){
+    if(!dailyWb.SheetNames.includes(sheetName)) continue;
+    const ws = dailyWb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
+    const header = rows[0];
+    const col = {};
+    header.forEach((name,i) => { if(name) col[name] = i; });
+
+    for(let i=1;i<rows.length;i++){
+      const r = rows[i];
+      if(!r || r[col['SKU']] == null) continue;
+      const baseSku = r[col['Base SKU']];
+      const staleInfo = staleList[baseSku];
+      if(!staleInfo) continue; // not on the stale list -> skip
+
+      const isTikTok = platform === 'TikTok Shop';
+      const revenue = col['Revenue'] !== undefined ? r[col['Revenue']] : null;
+      let cost = col['COGS'] !== undefined ? r[col['COGS']] : null;
+      if(cost == null) cost = costBook[baseSku] != null ? costBook[baseSku] : null;
+
+      out.push({
+        date: reportDate,
+        platform,
+        brand: brandLookup[baseSku] || '',
+        base_sku: baseSku,
+        days_since_received: staleInfo.days_since_received,
+        bucket: staleInfo.bucket,
+        units_sold: Number(r[col['Units Sold']]) || 0,
+        revenue: isTikTok ? null : (typeof revenue === 'number' ? revenue : null),
+        cost: isTikTok ? null : (typeof cost === 'number' ? cost : null),
+      });
+    }
+  }
+  return out;
+}
+
+function attachListenersOnce(){
+  if(listenersAttached) return;
+  listenersAttached = true;
+
+  document.getElementById('platformFilter').addEventListener('change', renderSkuTable);
+
+  document.querySelectorAll('#rangeToggle button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#rangeToggle button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      currentRange = Number(btn.dataset.range);
+      const lastDate = [...new Set(RAW.map(r=>r.date))].sort().pop() || null;
+      const platforms = [...new Set(RAW.map(r=>r.platform))].sort();
+      renderAll(lastDate, platforms);
+    });
+  });
+
+  document.querySelectorAll('#skuTable th[data-key]').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const key = th.dataset.key;
+      if(skuSort.key===key){ skuSort.dir = skuSort.dir==='desc'?'asc':'desc'; }
+      else { skuSort = {key, dir:'desc'}; }
+      renderSkuTable();
+    });
+  });
+
+  document.getElementById('compareDateA').addEventListener('change', () => { compareAUserSet = true; renderCompare(); });
+  document.getElementById('compareDateB').addEventListener('change', () => { compareBUserSet = true; renderCompare(); });
+  document.getElementById('compareTypeA').addEventListener('change', renderCompare);
+  document.getElementById('compareTypeB').addEventListener('change', renderCompare);
+}
+
+function refreshDashboard(){
+  attachListenersOnce();
+
+  const dates = [...new Set(RAW.map(r=>r.date))].sort();
+  const lastDate = dates[dates.length-1] || null;
+  document.getElementById('lastUpdated').textContent = lastDate ? ('Last data: ' + lastDate) : 'No data';
+
+  const uniqueDates = dates.length;
+  document.getElementById('dataSummary').textContent = RAW.length
+    ? `${RAW.length} row(s) across ${uniqueDates} day(s), stored in this browser`
+    : 'No data stored in this browser yet';
+
+  const platforms = [...new Set(RAW.map(r=>r.platform))].sort();
+  const sel = document.getElementById('platformFilter');
+  const prevValue = sel.value;
+  sel.innerHTML = '<option value="ALL">All platforms</option>';
+  platforms.forEach(p=>{
+    const o = document.createElement('option'); o.value=p; o.textContent=p; sel.appendChild(o);
+  });
+  if(platforms.includes(prevValue)) sel.value = prevValue;
+
+  if(RAW.length > 0) hideStatus();
+
+  renderAll(lastDate, platforms);
+  populateCompareControls();
+  renderCompare();
+  try{ renderTrendsSection(); }catch(e){ console.error('Failed to render trends section:', e); }
+}
+
+function rowsInRange(lastDate){
+  if(!lastDate) return [];
+  if(currentRange === 0) return RAW; // all
+  const end = new Date(lastDate);
+  const start = new Date(end);
+  start.setDate(start.getDate() - (currentRange - 1));
+  return RAW.filter(r=>{
+    const d = new Date(r.date);
+    return d >= start && d <= end;
+  });
+}
+
+function renderAll(lastDate, platforms){
+  const rows = rowsInRange(lastDate);
+  const steps = [
+    ['KPIs', () => renderKpis(rows)],
+    ['platform cards', () => renderPlatformCards(rows, platforms)],
+    ['bucket table', () => renderBucketTable(rows, platforms)],
+    ['SKU table', () => renderSkuTable()],
+  ];
+  for(const [name, fn] of steps){
+    try{ fn(); }
+    catch(e){ console.error('Failed to render ' + name + ':', e); }
+  }
+}
+
+function renderKpis(rows){
+  const totalUnits = rows.reduce((s,r)=>s+r.units_sold,0);
+  const totalRevenue = rows.filter(r=>r.platform!=='TikTok Shop' && r.revenue!=null).reduce((s,r)=>s+r.revenue,0);
+  const liquidateUnits = rows.filter(r=>r.bucket==='LIQUIDATE').reduce((s,r)=>s+r.units_sold,0);
+  const platformsActive = new Set(rows.map(r=>r.platform)).size;
+
+  const kpis = [
+    {label:'Stale units sold', value: totalUnits.toLocaleString()},
+    {label:'Revenue (ex. TikTok)', value: fmtMoney(totalRevenue)},
+    {label:'Liquidate-bucket units', value: liquidateUnits.toLocaleString(), warn: liquidateUnits>0},
+    {label:'Platforms w/ stale sales', value: platformsActive},
+  ];
+  document.getElementById('kpiRow').innerHTML = kpis.map(k=>`
+    <div class="kpi">
+      <div class="label">${k.label}</div>
+      <div class="value ${k.warn?'warn':''}">${k.value}</div>
+    </div>`).join('');
+}
+
+function renderPlatformCards(rows, platforms){
+  const grid = document.getElementById('platformGrid');
+  const present = platforms.filter(p => rows.some(r=>r.platform===p));
+  if(present.length===0){ grid.innerHTML = '<div style="color:var(--muted2);font-size:13px;">No stale sales in this range.</div>'; return; }
+
+  grid.innerHTML = present.map(p=>{
+    const prows = rows.filter(r=>r.platform===p);
+    const units = prows.reduce((s,r)=>s+r.units_sold,0);
+    const revenue = prows.filter(r=>r.revenue!=null).reduce((s,r)=>s+r.revenue,0);
+    const isTikTok = p==='TikTok Shop';
+
+    const bucketUnits = {};
+    BUCKET_DEFS.forEach(b=>{ bucketUnits[b.key] = prows.filter(r=>r.bucket===b.key).reduce((s,r)=>s+r.units_sold,0); });
+    const total = Object.values(bucketUnits).reduce((a,b)=>a+b,0) || 1;
+
+    const strip = BUCKET_DEFS.map(b=>{
+      const pct = (bucketUnits[b.key]/total*100).toFixed(1);
+      return pct>0 ? `<span style="width:${pct}%;background:${b.color}"></span>` : '';
+    }).join('');
+
+    const labels = BUCKET_DEFS.map(b=>`<span><i class="dot" style="background:${b.color}"></i>${bucketUnits[b.key]}</span>`).join('');
+
+    return `
+      <div class="platform-card">
+        <div class="pname">${p}</div>
+        <div class="pmeta">
+          <div><div class="n">${units}</div><div class="l">stale units</div></div>
+          <div style="text-align:right"><div class="n">${isTikTok ? '—' : fmtMoney(revenue)}</div><div class="l">${isTikTok?'units only':'revenue'}</div></div>
+        </div>
+        <div class="aging-strip">
+          <div class="strip-bar">${strip}</div>
+          <div class="strip-labels">${labels}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function distinctDatesDesc(){
+  return [...new Set(RAW.map(r=>r.date))].sort().reverse();
+}
+
+function getPeriodRows(anchorDate, type){
+  if(!anchorDate) return [];
+  if(type === '7d'){
+    const end = new Date(anchorDate);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 6);
+    return RAW.filter(r=>{
+      const d = new Date(r.date);
+      return d >= start && d <= end;
+    });
+  }
+  return RAW.filter(r => r.date === anchorDate);
+}
+
+function aggregatePeriod(rows){
+  const units = rows.reduce((s,r)=>s+r.units_sold,0);
+  const revenue = rows.filter(r=>r.platform!=='TikTok Shop' && r.revenue!=null).reduce((s,r)=>s+r.revenue,0);
+  const liquidateUnits = rows.filter(r=>r.bucket==='LIQUIDATE').reduce((s,r)=>s+r.units_sold,0);
+  const byPlatform = {};
+  rows.forEach(r=>{
+    if(!byPlatform[r.platform]) byPlatform[r.platform] = {units:0, revenue:0};
+    byPlatform[r.platform].units += r.units_sold;
+    if(r.platform!=='TikTok Shop' && r.revenue!=null) byPlatform[r.platform].revenue += r.revenue;
+  });
+  return {units, revenue, liquidateUnits, byPlatform};
+}
+
+function populateCompareControls(){
+  const dates = distinctDatesDesc();
+  const selA = document.getElementById('compareDateA');
+  const selB = document.getElementById('compareDateB');
+  const prevA = selA.value, prevB = selB.value;
+
+  [selA, selB].forEach(sel => { sel.innerHTML = dates.map(d=>`<option value="${d}">${d}</option>`).join(''); });
+
+  if(compareAUserSet && dates.includes(prevA)) selA.value = prevA;
+  else if(dates[0]) selA.value = dates[0];
+
+  if(compareBUserSet && dates.includes(prevB)) selB.value = prevB;
+  else if(dates[1]) selB.value = dates[1];
+  else if(dates[0]) selB.value = dates[0];
+}
+
+function deltaSpan(a, b, fmt){
+  const diff = a - b;
+  const cls = diff > 0 ? 'pos' : (diff < 0 ? 'neg' : 'flat');
+  const sign = diff > 0 ? '+' : '';
+  return `<span class="delta ${cls}">${sign}${fmt(diff)}</span>`;
+}
+
+function renderCompare(){
+  const body = document.getElementById('compareBody');
+  const dates = distinctDatesDesc();
+  if(dates.length < 2){
+    body.innerHTML = '<div style="color:var(--muted2);font-size:13px;">Process at least 2 days of exports to compare periods.</div>';
+    return;
+  }
+
+  const dateA = document.getElementById('compareDateA').value;
+  const typeA = document.getElementById('compareTypeA').value;
+  const dateB = document.getElementById('compareDateB').value;
+  const typeB = document.getElementById('compareTypeB').value;
+
+  const rowsA = getPeriodRows(dateA, typeA);
+  const rowsB = getPeriodRows(dateB, typeB);
+  const aggA = aggregatePeriod(rowsA);
+  const aggB = aggregatePeriod(rowsB);
+
+  const kpis = [
+    {label:'Stale units sold', a:aggA.units, b:aggB.units, fmt:(n)=>n.toLocaleString()},
+    {label:'Revenue (ex. TikTok)', a:aggA.revenue, b:aggB.revenue, fmt:fmtMoney},
+    {label:'Liquidate-bucket units', a:aggA.liquidateUnits, b:aggB.liquidateUnits, fmt:(n)=>n.toLocaleString()},
+  ];
+
+  const kpiHtml = kpis.map(k=>`
+    <div class="compare-kpi">
+      <div class="label">${k.label}</div>
+      <div class="row"><span class="val">${k.fmt(k.a)}</span>${deltaSpan(k.a, k.b, k.fmt)}</div>
+      <div class="row" style="margin-top:2px;"><span style="color:var(--muted2);font-size:11px;">vs ${k.fmt(k.b)}</span></div>
+    </div>`).join('');
+
+  const platforms = [...new Set([...Object.keys(aggA.byPlatform), ...Object.keys(aggB.byPlatform)])].sort();
+  const tableRows = platforms.map(p=>{
+    const a = aggA.byPlatform[p] || {units:0, revenue:0};
+    const b = aggB.byPlatform[p] || {units:0, revenue:0};
+    const isTikTok = p === 'TikTok Shop';
+    return `<tr>
+      <td style="text-align:left">${p}</td>
+      <td>${a.units}</td>
+      <td>${b.units}</td>
+      <td>${deltaSpan(a.units, b.units, n=>n.toLocaleString())}</td>
+      <td>${isTikTok ? '—' : fmtMoney(a.revenue)}</td>
+      <td>${isTikTok ? '—' : fmtMoney(b.revenue)}</td>
+      <td>${isTikTok ? '—' : deltaSpan(a.revenue, b.revenue, fmtMoney)}</td>
+    </tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div class="compare-kpi-row">${kpiHtml}</div>
+    <div class="table-panel">
+      <table>
+        <thead>
+          <tr><th>Platform</th><th>Units A</th><th>Units B</th><th>Δ Units</th><th>Revenue A</th><th>Revenue B</th><th>Δ Revenue</th></tr>
+        </thead>
+        <tbody>${tableRows || '<tr><td colspan="7" style="text-align:center;color:var(--muted2)">No stale sales in either period.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+}
+
+// ---- Lightweight inline-SVG charts, no external library ----
+
+function niceMax(v){
+  if(v <= 0) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(v)));
+  const norm = v / mag;
+  let step;
+  if(norm <= 1) step = 1;
+  else if(norm <= 2) step = 2;
+  else if(norm <= 5) step = 5;
+  else step = 10;
+  return step * mag;
+}
+
+function fmtShortDate(d){
+  const parts = d.split('-');
+  return parts.length === 3 ? (parts[1] + '/' + parts[2]) : d;
+}
+
+// Multi-series line chart. series = [{label, color, data:[nums aligned to dates]}]
+function buildLineChartSVG(dates, series){
+  const W = 900, H = 260, padL = 36, padR = 12, padT = 12, padB = 28;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+
+  const allVals = series.flatMap(s => s.data);
+  const maxVal = niceMax(Math.max(1, ...allVals));
+
+  const n = dates.length;
+  const xFor = i => n <= 1 ? padL + plotW/2 : padL + (i/(n-1)) * plotW;
+  const yFor = v => padT + plotH * (1 - v/maxVal);
+
+  // gridlines + y labels (4 bands)
+  let grid = '';
+  for(let g=0; g<=4; g++){
+    const val = Math.round(maxVal * g / 4);
+    const y = yFor(val);
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" style="stroke:var(--border)" stroke-width="1"/>`;
+    grid += `<text x="${padL-8}" y="${y+3}" text-anchor="end" style="fill:var(--muted2);font-family:var(--mono);font-size:9px;">${val}</text>`;
+  }
+
+  // x labels - thin to at most ~8
+  const labelEvery = Math.max(1, Math.ceil(n/8));
+  let xLabels = '';
+  dates.forEach((d,i)=>{
+    if(i % labelEvery !== 0 && i !== n-1) return;
+    xLabels += `<text x="${xFor(i)}" y="${H-8}" text-anchor="middle" style="fill:var(--muted2);font-family:var(--mono);font-size:9px;">${fmtShortDate(d)}</text>`;
+  });
+
+  const paths = series.map(s=>{
+    if(n === 1){
+      const x = xFor(0), y = yFor(s.data[0]);
+      return `<circle cx="${x}" cy="${y}" r="3" style="fill:${s.color}"/>`;
+    }
+    const d = s.data.map((v,i)=> (i===0?'M':'L') + xFor(i).toFixed(1) + ',' + yFor(v).toFixed(1)).join(' ');
+    return `<path d="${d}" fill="none" style="stroke:${s.color}" stroke-width="2"/>`;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${xLabels}${paths}</svg>`;
+}
+
+// Stacked bar chart. buckets in bottom-to-top stacking order.
+function buildStackedBarSVG(dates, dataByDate, bucketOrder, colorFor){
+  const W = 900, H = 260, padL = 36, padR = 12, padT = 12, padB = 28;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = dates.length;
+
+  const totals = dates.map(d => bucketOrder.reduce((s,b)=> s + (dataByDate[d]?.[b]||0), 0));
+  const maxVal = niceMax(Math.max(1, ...totals));
+  const yFor = v => padT + plotH * (1 - v/maxVal);
+
+  let grid = '';
+  for(let g=0; g<=4; g++){
+    const val = Math.round(maxVal * g / 4);
+    const y = yFor(val);
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" style="stroke:var(--border)" stroke-width="1"/>`;
+    grid += `<text x="${padL-8}" y="${y+3}" text-anchor="end" style="fill:var(--muted2);font-family:var(--mono);font-size:9px;">${val}</text>`;
+  }
+
+  const slot = plotW / n;
+  const barW = Math.min(28, slot * 0.6);
+
+  const labelEvery = Math.max(1, Math.ceil(n/8));
+  let xLabels = '';
+  const bars = dates.map((d,i)=>{
+    const cx = padL + slot*i + slot/2;
+    let cum = 0;
+    let rects = '';
+    bucketOrder.forEach(b=>{
+      const v = dataByDate[d]?.[b] || 0;
+      if(v > 0){
+        const yTop = yFor(cum+v), yBot = yFor(cum);
+        rects += `<rect x="${(cx-barW/2).toFixed(1)}" y="${yTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${(yBot-yTop).toFixed(1)}" style="fill:${colorFor(b)}"><title>${d} ${b}: ${v}</title></rect>`;
+      }
+      cum += v;
+    });
+    if(i % labelEvery === 0 || i === n-1){
+      xLabels += `<text x="${cx}" y="${H-8}" text-anchor="middle" style="fill:var(--muted2);font-family:var(--mono);font-size:9px;">${fmtShortDate(d)}</text>`;
+    }
+    return rects;
+  }).join('');
+
+  return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${grid}${bars}${xLabels}</svg>`;
+}
+
+function renderTrendsSection(){
+  const dates = [...new Set(RAW.map(r=>r.date))].sort();
+  const lineEl = document.getElementById('trendLineChart');
+  const lineLegend = document.getElementById('trendLineLegend');
+  const bucketEl = document.getElementById('bucketMixChart');
+  const bucketLegend = document.getElementById('bucketMixLegend');
+
+  if(dates.length === 0){
+    lineEl.innerHTML = '<div class="chart-empty">No data yet.</div>';
+    bucketEl.innerHTML = '<div class="chart-empty">No data yet.</div>';
+    lineLegend.innerHTML = ''; bucketLegend.innerHTML = '';
+    return;
+  }
+
+  const platforms = [...new Set(RAW.map(r=>r.platform))].sort();
+  const series = platforms.map(p=>({
+    label: p,
+    color: PLATFORM_COLORS[p] || '#999',
+    data: dates.map(d => RAW.filter(r=>r.date===d && r.platform===p).reduce((s,r)=>s+r.units_sold,0)),
+  }));
+  lineEl.innerHTML = buildLineChartSVG(dates, series);
+  lineLegend.innerHTML = platforms.map(p=>`<span class="item"><i class="swatch" style="background:${PLATFORM_COLORS[p]||'#999'}"></i>${p}</span>`).join('');
+
+  const bucketOrder = ['MONITOR','ACTION','DEEPER','LIQUIDATE'];
+  const dataByDate = {};
+  dates.forEach(d=>{
+    dataByDate[d] = {};
+    bucketOrder.forEach(b=>{
+      dataByDate[d][b] = RAW.filter(r=>r.date===d && r.bucket===b).reduce((s,r)=>s+r.units_sold,0);
+    });
+  });
+  bucketEl.innerHTML = buildStackedBarSVG(dates, dataByDate, bucketOrder, b => BUCKET_COLOR_HEX[b]);
+  bucketLegend.innerHTML = bucketOrder.map(b=>{
+    const def = BUCKET_DEFS.find(x=>x.key===b);
+    return `<span class="item"><i class="swatch" style="background:${BUCKET_COLOR_HEX[b]}"></i>${def.label}</span>`;
+  }).join('');
+}
+
+function renderBucketTable(rows, platforms){
+  const present = platforms.filter(p => rows.some(r=>r.platform===p));
+  const tbody = document.querySelector('#bucketTable tbody');
+  if(present.length===0){ tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted2)">No stale sales in this range.</td></tr>`; return; }
+
+  tbody.innerHTML = present.map(p=>{
+    const prows = rows.filter(r=>r.platform===p);
+    const b = {};
+    BUCKET_DEFS.forEach(def=>{ b[def.key] = prows.filter(r=>r.bucket===def.key).reduce((s,r)=>s+r.units_sold,0); });
+    const total = Object.values(b).reduce((a,c)=>a+c,0);
+    return `<tr>
+      <td style="text-align:left">${p}</td>
+      <td>${b.MONITOR||0}</td>
+      <td>${b.ACTION||0}</td>
+      <td>${b.DEEPER||0}</td>
+      <td>${b.LIQUIDATE||0}</td>
+      <td style="font-family:var(--mono);font-weight:600">${total}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSkuTable(){
+  const lastDate = [...new Set(RAW.map(r=>r.date))].sort().pop();
+  const rows = rowsInRange(lastDate);
+  const filterPlatform = document.getElementById('platformFilter').value;
+
+  const filtered = filterPlatform==='ALL' ? rows : rows.filter(r=>r.platform===filterPlatform);
+
+  // aggregate by platform+sku+bucket
+  const agg = {};
+  filtered.forEach(r=>{
+    const k = r.platform+'|'+r.base_sku+'|'+r.bucket;
+    if(!agg[k]) agg[k] = {platform:r.platform, brand:r.brand, base_sku:r.base_sku, bucket:r.bucket, days_since_received:r.days_since_received, units_sold:0, revenue:0, hasRevenue:false};
+    agg[k].units_sold += r.units_sold;
+    if(r.revenue!=null){ agg[k].revenue += r.revenue; agg[k].hasRevenue = true; }
+    agg[k].days_since_received = Math.max(agg[k].days_since_received, r.days_since_received);
+  });
+  let list = Object.values(agg);
+
+  list.sort((a,b)=>{
+    const dir = skuSort.dir==='asc'?1:-1;
+    const av = a[skuSort.key], bv = b[skuSort.key];
+    if(typeof av === 'string') return av.localeCompare(bv)*dir;
+    return (av-bv)*dir;
+  });
+
+  const tbody = document.querySelector('#skuTable tbody');
+  if(list.length===0){ tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted2)">No rows for this selection.</td></tr>`; return; }
+
+  tbody.innerHTML = list.slice(0,50).map(r=>`
+    <tr>
+      <td style="text-align:left">${r.platform}</td>
+      <td style="text-align:left">${r.brand}</td>
+      <td style="text-align:left;font-family:var(--mono)">${r.base_sku}</td>
+      <td><span class="bucket-pill" style="background:${BUCKET_COLOR_HEX[r.bucket]}22;color:${BUCKET_COLOR_HEX[r.bucket]}">${r.bucket}</span></td>
+      <td>${r.days_since_received}</td>
+      <td style="font-family:var(--mono)">${r.units_sold}</td>
+      <td style="font-family:var(--mono)">${r.platform==='TikTok Shop' ? '—' : fmtMoney(r.revenue)}</td>
+    </tr>`).join('');
+}
+</script>
+</body>
+</html>
