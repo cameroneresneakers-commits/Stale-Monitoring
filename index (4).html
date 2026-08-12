@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stale Inventory Sales Monitor — ERE Sneakers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#14171c;
+    --panel:#1b1f26;
+    --panel2:#20242c;
+    --border:#2a2f38;
+    --text:#e8e5de;
+    --muted:#8b909c;
+    --muted2:#5f6470;
+    --walnut:#a06a45;
+    --current:#3d4552;
+    --olive:#78805a;
+    --amber:#c98a3e;
+    --rust:#b8552f;
+    --maroon:#7a3226;
+    --mono:'IBM Plex Mono', ui-monospace, monospace;
+    --sans:'Inter', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+  .wrap{max-width:1280px;margin:0 auto;padding:32px 28px 80px;}
+
+  /* Header */
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:16px;
+    border-bottom:1px solid var(--border);
+    padding-bottom:20px;
+    margin-bottom:28px;
+  }
+  .title-block .eyebrow{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--muted2);
+    margin-bottom:6px;
+  }
+  h1{
+    font-family:var(--mono);
+    font-weight:600;
+    font-size:26px;
+    margin:0;
+    letter-spacing:-0.01em;
+  }
+  .subtitle{
+    color:var(--muted);
+    font-size:13px;
+    margin-top:6px;
+  }
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .range-toggle{display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+  .range-toggle button{
+    background:var(--panel);
+    color:var(--muted);
+    border:none;
+    padding:8px 14px;
+    font-family:var(--mono);
+    font-size:12px;
+    cursor:pointer;
+    border-right:1px solid var(--border);
+  }
+  .range-toggle button:last-child{border-right:none;}
+  .range-toggle button.active{background:var(--walnut);color:#fff;}
+  .range-toggle button:hover:not(.active){color:var(--text);}
+  #lastUpdated{font-family:var(--mono);font-size:11px;color:var(--muted2);}
+
+  /* Status / empty state */
+  #statusMsg{
+    display:none;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-left:3px solid var(--rust);
+    padding:14px 18px;
+    border-radius:6px;
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:24px;
+  }
+
+  /* KPI row */
+  .kpi-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(150px,1fr));
+    gap:12px;
+    margin-bottom:32px;
+  }
+  .kpi{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:16px 18px;
+  }
+  .kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted2);font-family:var(--mono);}
+  .kpi .value{font-family:var(--mono);font-size:24px;font-weight:600;margin-top:6px;}
+  .kpi .value.warn{color:var(--rust);}
+
+  section{margin-bottom:36px;}
+  .section-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:14px;
+  }
+  .section-head h2{
+    font-family:var(--mono);
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--muted);
+    margin:0;
+    font-weight:600;
+  }
+  select{
+    background:var(--panel);
+    color:var(--text);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:6px 10px;
+    font-family:var(--mono);
+    font-size:12px;
+  }
+
+  /* Platform cards */
+  .platform-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(270px,1fr));
+    gap:14px;
+  }
+  .platform-card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:18px 20px;
+  }
+  .platform-card .pname{
+    font-family:var(--mono);
+    font-weight:600;
+    font-size:15px;
+  }
+  .platform-card .pmeta{
+    display:flex;
+    justify-content:space-between;
+    margin-top:12px;
+    font-size:13px;
+  }
+  .platform-card .pmeta .n{font-family:var(--mono);font-size:19px;font-weight:600;}
+  .platform-card .pmeta .l{color:var(--muted2);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;margin-top:2px;}
+
+  /* aging strip - signature element */
+  .aging-strip{margin-top:16px;}
+  .strip-bar{
+    display:flex;
+    height:10px;
+    border-radius:3px;
+    overflow:hidden;
+    background:var(--border);
+  }
+  .strip-bar span{height:100%;}
+  .strip-labels{
+    display:flex;
+    justify-content:space-between;
+    margin-top:6px;
+    font-family:var(--mono);
+    font-size:9.5px;
+    color:var(--muted2);
+    letter-spacing:.03em;
+  }
+  .strip-labels span{display:flex;align-items:center;gap:4px;}
+  .dot{width:6px;height:6px;border-radius:50%;display:inline-block;}
+
+  /* Chart */
+  .chart-panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:20px;
+  }
+  canvas{max-height:340px;}
+
+  /* Tables */
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{padding:10px 12px;text-align:right;border-bottom:1px solid var(--border);}
+  th:first-child,td:first-child{text-align:left;}
+  th{
+    font-family:var(--mono);
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted2);
+    font-weight:500;
+    cursor:pointer;
+    user-select:none;
+  }
+  th:hover{color:var(--text);}
+  tbody tr:hover{background:var(--panel2);}
+  .table-panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:6px 14px;
+    overflow-x:auto;
+  }
+  .bucket-pill{
+    font-family:var(--mono);
+    font-size:10.5px;
+    padding:2px 7px;
+    border-radius:10px;
+    display:inline-block;
+  }
+  /* Upload / data management panel */
+  .upload-panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:20px;
+  }
+  .upload-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(220px,1fr));
+    gap:14px;
+  }
+  .file-field label{
+    display:block;
+    font-family:var(--mono);
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.06em;
+    color:var(--muted2);
+    margin-bottom:6px;
+  }
+  .file-field input[type=file]{
+    width:100%;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:8px;
+    color:var(--text);
+    font-size:12px;
+    font-family:var(--sans);
+  }
+  .file-field input[type=file]::file-selector-button{
+    background:var(--border);
+    color:var(--text);
+    border:none;
+    border-radius:4px;
+    padding:5px 10px;
+    margin-right:8px;
+    font-family:var(--mono);
+    font-size:11px;
+    cursor:pointer;
+  }
+  .upload-actions{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    margin-top:16px;
+    flex-wrap:wrap;
+  }
+  button.btn{
+    background:var(--walnut);
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    padding:9px 16px;
+    font-family:var(--mono);
+    font-size:12px;
+    cursor:pointer;
+    font-weight:600;
+  }
+  button.btn:hover{opacity:0.9;}
+  button.btn.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--border);}
+  button.btn.danger{background:transparent;color:var(--rust);border:1px solid var(--rust);}
+  button.btn.danger:hover{background:var(--rust);color:#fff;}
+  #uploadStatus{font-family:var(--mono);font-size:12px;color:var(--muted);}
+  #uploadStatus.ok{color:var(--olive);}
+  #uploadStatus.err{color:var(--rust);}
+  .data-bar{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    flex-wrap:wrap;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:14px 18px;
+  }
+  .data-bar #dataSummary{font-family:var(--mono);font-size:12px;color:var(--muted2);margin-left:auto;}
+  input[type=file]{color:var(--text);}
+
+  footer{
+    margin-top:48px;
+    padding-top:20px;
+    border-top:1px solid var(--border);
+    color:var(--muted2);
+    font-size:11.5px;
+    font-family:var(--mono);
+    line-height:1.7;
+  }
+  @media (max-width:640px){
+    .wrap{padding:20px 16px 60px;}
+    h1{font-size:20px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="title-block">
+      <div class="eyebrow">ERE Sneakers · Operations</div>
+      <h1>Stale Inventory Sales Monitor</h1>
+      <div class="subtitle">Units sold from 31+ day aged stock, by platform. FIFO buckets: 31–60 Monitor · 61–90 Action · 91–120 Deeper · 120+ Liquidate. Everything runs in this browser — no repo folders, no server.</div>
+    </div>
+    <div class="controls">
+      <div class="range-toggle" id="rangeToggle">
+        <button data-range="1">Today</button>
+        <button data-range="7" class="active">7d</button>
+        <button data-range="30">30d</button>
+        <button data-range="0">All</button>
+      </div>
+      <div id="lastUpdated">—</div>
+    </div>
+  </header>
+
+  <div id="statusMsg"></div>
+
+  <section>
+    <div class="section-head"><h2>Add today's exports</h2></div>
+    <div class="upload-panel">
+      <div class="upload-row">
+        <div class="file-field">
+          <label for="fileDaily">Daily sales report (.xlsm)</label>
+          <input type="file" id="fileDaily" accept=".xlsm,.xlsx">
+        </div>
+        <div class="file-field">
+          <label for="fileStale">Stale product list (.xlsx)</label>
+          <input type="file" id="fileStale" accept=".xlsx">
+        </div>
+        <div class="file-field">
+          <label for="fileInventory">Available inventory (.csv)</label>
+          <input type="file" id="fileInventory" accept=".csv">
+        </div>
+      </div>
+      <div class="upload-actions">
+        <button class="btn" id="processBtn">Process &amp; save</button>
+        <span id="uploadStatus"></span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="data-bar">
+      <button class="btn secondary" id="exportBtn">Export backup (.csv)</button>
+      <button class="btn secondary" id="importBtn">Import backup (.csv)</button>
+      <input type="file" id="importFile" accept=".csv" style="display:none">
+      <button class="btn danger" id="clearBtn">Clear all data</button>
+      <span id="dataSummary"></span>
+    </div>
+  </section>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <section>
+    <div class="section-head"><h2>By platform</h2></div>
+    <div class="platform-grid" id="platformGrid"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Daily stale units sold — trend</h2></div>
+    <div class="chart-panel" id="chartPanel"><canvas id="trendChart"></canvas></div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2>Bucket breakdown (units sold, selected range)</h2></div>
+    <div class="table-panel">
+      <table id="bucketTable">
+        <thead>
+          <tr><th>Platform</th><th>Monitor 31–60</th><th>Action 61–90</th><th>Deeper 91–120</th><th>Liquidate 120+</th><th>Total</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>SKU drilldown</h2>
+      <select id="platformFilter"><option value="ALL">All platforms</option></select>
+    </div>
+    <div class="table-panel">
+      <table id="skuTable">
+        <thead>
+          <tr>
+            <th data-key="platform">Platform</th>
+            <th data-key="brand">Brand</th>
+            <th data-key="base_sku">SKU</th>
+            <th data-key="bucket">Bucket</th>
+            <th data-key="days_since_received">Days aged</th>
+            <th data-key="units_sold">Units sold</th>
+            <th data-key="revenue">Revenue</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Data lives in this browser's local storage — nothing is sent anywhere, and nothing needs to be pushed to a repo for daily use. Use "Export backup" regularly, since local storage can be cleared by the browser or lost if you switch machines; "Import backup" restores it.<br>
+    A unit only counts as stale here if its base SKU is on that day's stale product list. TikTok Shop is reported in units only (no dollar figures) per standing fee-model rule. Buckets are computed from days_since_received — 0–30 is current stock and is excluded from all totals on this page.
+  </footer>
+
+</div>
+
+<script>
+const BUCKET_DEFS = [
+  {key:'MONITOR',   label:'Monitor 31–60',   min:31,  max:60,  color:'var(--olive)'},
+  {key:'ACTION',    label:'Action 61–90',    min:61,  max:90,  color:'var(--amber)'},
+  {key:'DEEPER',    label:'Deeper 91–120',   min:91,  max:120, color:'var(--rust)'},
+  {key:'LIQUIDATE', label:'Liquidate 120+',  min:121, max:Infinity, color:'var(--maroon)'}
+];
+const BUCKET_COLOR_HEX = { MONITOR:'#78805a', ACTION:'#c98a3e', DEEPER:'#b8552f', LIQUIDATE:'#7a3226' };
+const PLATFORM_COLORS = {
+  'Amazon':'#e2a33e','eBay':'#7ea6c9','TikTok Shop':'#c96b8a','StockX':'#8fae7a',
+  'GOAT':'#c98a3e','Stadium Goods':'#a08cc9','Temu':'#d97b5a','Shopify':'#6fb8a8'
+};
+function bucketFor(days){
+  for(const b of BUCKET_DEFS){ if(days>=b.min && days<=b.max) return b.key; }
+  return null; // current stock, 0-30
+}
+function fmtMoney(n){ return '$' + Number(n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
+function fmtDate(d){ return d; }
+
+let currentRange = 7;
+let skuSort = {key:'units_sold', dir:'desc'};
+let trendChartInstance = null;
+
+const PLATFORM_SHEET_MAP = {
+  'eBay Raw': 'eBay',
+  'Amazon Raw': 'Amazon',
+  'Tiktok Raw': 'TikTok Shop',
+  'StockX Raw': 'StockX',
+  'GOAT Raw': 'GOAT',
+  'Stadium Goods Raw': 'Stadium Goods',
+  'Temu Raw': 'Temu',
+  'Shopify Raw': 'Shopify',
+};
+const BASE_SKU_SUFFIX_RE = /-[0-9]{1,2}(\.[05])?[A-Za-z]?$/;
+function stripSizeSuffix(sku){ return typeof sku === 'string' ? sku.replace(BASE_SKU_SUFFIX_RE, '') : sku; }
+
+const STORAGE_KEY = 'stale_monitor_history_v1';
+let listenersAttached = false;
+
+function showStatus(msg){
+  const el = document.getElementById('statusMsg');
+  el.style.display = 'block';
+  el.textContent = msg;
+}
+function hideStatus(){
+  document.getElementById('statusMsg').style.display = 'none';
+}
+
+function loadHistory(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){
+    console.error('Could not read local storage', e);
+    return [];
+  }
+}
+function saveHistory(rows){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(rows));
+}
+
+function setUploadStatus(msg, isErr, isOk){
+  const el = document.getElementById('uploadStatus');
+  el.textContent = msg;
+  el.className = isErr ? 'err' : (isOk ? 'ok' : '');
+}
+
+function readAsArrayBuffer(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('Could not read ' + file.name));
+    r.readAsArrayBuffer(file);
+  });
+}
+function readAsText(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('Could not read ' + file.name));
+    r.readAsText(file);
+  });
+}
+
+async function processUpload(){
+  const dailyFile = document.getElementById('fileDaily').files[0];
+  const staleFile = document.getElementById('fileStale').files[0];
+  const invFile = document.getElementById('fileInventory').files[0];
+  if(!dailyFile || !staleFile || !invFile){
+    setUploadStatus('Select all three files first.', true);
+    return;
+  }
+  setUploadStatus('Processing…');
+  try{
+    const [dailyBuf, staleBuf, invText] = await Promise.all([
+      readAsArrayBuffer(dailyFile), readAsArrayBuffer(staleFile), readAsText(invFile)
+    ]);
+    const dailyWb = XLSX.read(dailyBuf, {type:'array', cellDates:true});
+    const staleWb = XLSX.read(staleBuf, {type:'array', cellDates:true});
+
+    const staleList = parseStaleList(staleWb);
+    const costBook = parseCostBook(dailyWb);
+    const brandLookup = parseBrandLookup(invText);
+    const reportDate = parseReportDate(dailyWb);
+    if(!reportDate) throw new Error('Could not find "Date Report Coverage:" in the daily sales report');
+
+    const dayRows = buildDayRows(dailyWb, staleList, costBook, brandLookup, reportDate);
+
+    RAW = RAW.filter(r => r.date !== reportDate).concat(dayRows);
+    saveHistory(RAW);
+    setUploadStatus(`Saved ${dayRows.length} stale-sale row(s) for ${reportDate}.`, false, true);
+    document.getElementById('fileDaily').value = '';
+    document.getElementById('fileStale').value = '';
+    document.getElementById('fileInventory').value = '';
+    refreshDashboard();
+  }catch(e){
+    console.error(e);
+    setUploadStatus('Error: ' + e.message, true);
+  }
+}
+
+function exportBackup(){
+  const fields = ['date','platform','brand','base_sku','days_since_received','bucket','units_sold','revenue','cost'];
+  const lines = [fields.join(',')];
+  RAW.forEach(r=>{
+    lines.push(fields.map(f=>{
+      const v = r[f];
+      if(v == null) return '';
+      const s = String(v);
+      return s.includes(',') ? `"${s}"` : s;
+    }).join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const lastDate = [...new Set(RAW.map(r=>r.date))].sort().pop() || 'backup';
+  a.href = url;
+  a.download = `stale_sales_backup_${lastDate}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function importBackup(file){
+  setUploadStatus('Importing…');
+  try{
+    const text = await readAsText(file);
+    const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+    if(parsed.errors && parsed.errors.length){
+      console.warn('CSV parse warnings:', parsed.errors);
+    }
+    const imported = parsed.data.map(r => ({
+      date: r.date,
+      platform: r.platform,
+      brand: r.brand || '',
+      base_sku: r.base_sku,
+      days_since_received: Number(r.days_since_received) || 0,
+      bucket: r.bucket || bucketFor(Number(r.days_since_received)),
+      units_sold: Number(r.units_sold) || 0,
+      revenue: r.revenue === '' || r.revenue == null ? null : Number(r.revenue),
+      cost: r.cost === '' || r.cost == null ? null : Number(r.cost),
+    })).filter(r => r.date && r.platform && r.base_sku);
+
+    if(imported.length === 0) throw new Error('No valid rows found in that file — check it matches the exported backup format.');
+
+    const importedDates = new Set(imported.map(r=>r.date));
+    RAW = RAW.filter(r => !importedDates.has(r.date)).concat(imported);
+    saveHistory(RAW);
+    setUploadStatus(`Imported ${imported.length} row(s) across ${importedDates.size} date(s).`, false, true);
+    refreshDashboard();
+  }catch(e){
+    console.error(e);
+    setUploadStatus('Import error: ' + e.message, true);
+  }
+}
+
+function clearAllData(){
+  if(!confirm('Delete all stored stale-sale history from this browser? This cannot be undone (export a backup first if you want one).')) return;
+  RAW = [];
+  localStorage.removeItem(STORAGE_KEY);
+  refreshDashboard();
+  setUploadStatus('All local data cleared.', false, true);
+}
+
+let RAW = loadHistory();
+
+if(RAW.length === 0){
+  showStatus('No data yet — process your first day\'s exports below to get started.');
+}
+
+document.getElementById('processBtn').addEventListener('click', processUpload);
+document.getElementById('exportBtn').addEventListener('click', exportBackup);
+document.getElementById('clearBtn').addEventListener('click', clearAllData);
+document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFile').click());
+document.getElementById('importFile').addEventListener('change', (e) => {
+  if(e.target.files[0]) importBackup(e.target.files[0]);
+  e.target.value = '';
+});
+
+refreshDashboard();
+
+// Base SKU -> {days_since_received, bucket}, from the "All Base SKUs" sheet of the stale list export
+function parseStaleList(staleWb){
+  const ws = staleWb.Sheets['All Base SKUs'];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
+  const headerIdx = rows.findIndex(r => r[0] === 'Base SKU');
+  if(headerIdx === -1) throw new Error('"All Base SKUs" sheet missing expected header row');
+  const header = rows[headerIdx];
+  const col = {};
+  header.forEach((name,i) => { if(name) col[name] = i; });
+
+  const stale = {};
+  for(let i = headerIdx+1; i < rows.length; i++){
+    const r = rows[i];
+    if(!r || r[0] == null) break;
+    const baseSku = r[col['Base SKU']];
+    const dsr = r[col['Days Since Received']];
+    const bucket = bucketFor(Number(dsr));
+    if(bucket === null) continue; // current stock (0-30 days), not stale
+    stale[baseSku] = {days_since_received: Number(dsr), bucket};
+  }
+  return stale;
+}
+
+// Base SKU -> avg unit cost, from the Cost Book sheet of the daily workbook (fallback for missing COGS)
+function parseCostBook(dailyWb){
+  const sheetName = dailyWb.SheetNames.find(n => n.trim() === 'Cost Book');
+  const costs = {};
+  if(!sheetName) return costs;
+  const ws = dailyWb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
+  const header = rows[0];
+  const col = {};
+  header.forEach((name,i) => { if(name) col[name] = i; });
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r[col['Base SKU']] == null) continue;
+    costs[r[col['Base SKU']]] = r[col['Avg Unit Cost']];
+  }
+  return costs;
+}
+
+// base_sku -> brand, from the available-inventory CSV export
+function parseBrandLookup(invText){
+  const parsed = Papa.parse(invText, {header:true, skipEmptyLines:true});
+  const lookup = {};
+  parsed.data.forEach(r => {
+    if(!r.SKU || !r.Brand) return;
+    const baseSku = stripSizeSuffix(r.SKU);
+    if(!(baseSku in lookup)) lookup[baseSku] = r.Brand;
+  });
+  return lookup;
+}
+
+// Reads the "Date Report Coverage:" cell from the Daily Combined Report sheet
+function parseReportDate(dailyWb){
+  const ws = dailyWb.Sheets['Daily Combined Report'];
+  if(!ws) return null;
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
+  for(const row of rows.slice(0,6)){
+    const idx = row.findIndex(c => c === 'Date Report Coverage:');
+    if(idx === -1) continue;
+    for(let i=idx+1;i<row.length;i++){
+      if(row[i] instanceof Date){
+        const d = row[i];
+        return d.getUTCFullYear() + '-' + String(d.getUTCMonth()+1).padStart(2,'0') + '-' + String(d.getUTCDate()).padStart(2,'0');
+      }
+    }
+  }
+  return null;
+}
+
+// Walks each platform's Raw sheet; a unit only becomes a row here if its base SKU is on the stale list
+function buildDayRows(dailyWb, staleList, costBook, brandLookup, reportDate){
+  const out = [];
+  for(const [sheetName, platform] of Object.entries(PLATFORM_SHEET_MAP)){
+    if(!dailyWb.SheetNames.includes(sheetName)) continue;
+    const ws = dailyWb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
+    const header = rows[0];
+    const col = {};
+    header.forEach((name,i) => { if(name) col[name] = i; });
+
+    for(let i=1;i<rows.length;i++){
+      const r = rows[i];
+      if(!r || r[col['SKU']] == null) continue;
+      const baseSku = r[col['Base SKU']];
+      const staleInfo = staleList[baseSku];
+      if(!staleInfo) continue; // not on the stale list -> skip
+
+      const isTikTok = platform === 'TikTok Shop';
+      const revenue = col['Revenue'] !== undefined ? r[col['Revenue']] : null;
+      let cost = col['COGS'] !== undefined ? r[col['COGS']] : null;
+      if(cost == null) cost = costBook[baseSku] != null ? costBook[baseSku] : null;
+
+      out.push({
+        date: reportDate,
+        platform,
+        brand: brandLookup[baseSku] || '',
+        base_sku: baseSku,
+        days_since_received: staleInfo.days_since_received,
+        bucket: staleInfo.bucket,
+        units_sold: Number(r[col['Units Sold']]) || 0,
+        revenue: isTikTok ? null : (typeof revenue === 'number' ? revenue : null),
+        cost: isTikTok ? null : (typeof cost === 'number' ? cost : null),
+      });
+    }
+  }
+  return out;
+}
+
+function attachListenersOnce(){
+  if(listenersAttached) return;
+  listenersAttached = true;
+
+  document.getElementById('platformFilter').addEventListener('change', renderSkuTable);
+
+  document.querySelectorAll('#rangeToggle button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#rangeToggle button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      currentRange = Number(btn.dataset.range);
+      const lastDate = [...new Set(RAW.map(r=>r.date))].sort().pop() || null;
+      const platforms = [...new Set(RAW.map(r=>r.platform))].sort();
+      renderAll(lastDate, platforms);
+    });
+  });
+
+  document.querySelectorAll('#skuTable th[data-key]').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const key = th.dataset.key;
+      if(skuSort.key===key){ skuSort.dir = skuSort.dir==='desc'?'asc':'desc'; }
+      else { skuSort = {key, dir:'desc'}; }
+      renderSkuTable();
+    });
+  });
+}
+
+function refreshDashboard(){
+  attachListenersOnce();
+
+  const dates = [...new Set(RAW.map(r=>r.date))].sort();
+  const lastDate = dates[dates.length-1] || null;
+  document.getElementById('lastUpdated').textContent = lastDate ? ('Last data: ' + lastDate) : 'No data';
+
+  const uniqueDates = dates.length;
+  document.getElementById('dataSummary').textContent = RAW.length
+    ? `${RAW.length} row(s) across ${uniqueDates} day(s), stored in this browser`
+    : 'No data stored in this browser yet';
+
+  const platforms = [...new Set(RAW.map(r=>r.platform))].sort();
+  const sel = document.getElementById('platformFilter');
+  const prevValue = sel.value;
+  sel.innerHTML = '<option value="ALL">All platforms</option>';
+  platforms.forEach(p=>{
+    const o = document.createElement('option'); o.value=p; o.textContent=p; sel.appendChild(o);
+  });
+  if(platforms.includes(prevValue)) sel.value = prevValue;
+
+  if(RAW.length > 0) hideStatus();
+
+  renderAll(lastDate, platforms);
+}
+
+function rowsInRange(lastDate){
+  if(!lastDate) return [];
+  if(currentRange === 0) return RAW; // all
+  const end = new Date(lastDate);
+  const start = new Date(end);
+  start.setDate(start.getDate() - (currentRange - 1));
+  return RAW.filter(r=>{
+    const d = new Date(r.date);
+    return d >= start && d <= end;
+  });
+}
+
+function renderAll(lastDate, platforms){
+  const rows = rowsInRange(lastDate);
+  const steps = [
+    ['KPIs', () => renderKpis(rows)],
+    ['platform cards', () => renderPlatformCards(rows, platforms)],
+    ['trend chart', () => renderTrendChart(lastDate, platforms)],
+    ['bucket table', () => renderBucketTable(rows, platforms)],
+    ['SKU table', () => renderSkuTable()],
+  ];
+  for(const [name, fn] of steps){
+    try{ fn(); }
+    catch(e){ console.error('Failed to render ' + name + ':', e); }
+  }
+}
+
+function renderKpis(rows){
+  const totalUnits = rows.reduce((s,r)=>s+r.units_sold,0);
+  const totalRevenue = rows.filter(r=>r.platform!=='TikTok Shop' && r.revenue!=null).reduce((s,r)=>s+r.revenue,0);
+  const liquidateUnits = rows.filter(r=>r.bucket==='LIQUIDATE').reduce((s,r)=>s+r.units_sold,0);
+  const platformsActive = new Set(rows.map(r=>r.platform)).size;
+
+  const kpis = [
+    {label:'Stale units sold', value: totalUnits.toLocaleString()},
+    {label:'Revenue (ex. TikTok)', value: fmtMoney(totalRevenue)},
+    {label:'Liquidate-bucket units', value: liquidateUnits.toLocaleString(), warn: liquidateUnits>0},
+    {label:'Platforms w/ stale sales', value: platformsActive},
+  ];
+  document.getElementById('kpiRow').innerHTML = kpis.map(k=>`
+    <div class="kpi">
+      <div class="label">${k.label}</div>
+      <div class="value ${k.warn?'warn':''}">${k.value}</div>
+    </div>`).join('');
+}
+
+function renderPlatformCards(rows, platforms){
+  const grid = document.getElementById('platformGrid');
+  const present = platforms.filter(p => rows.some(r=>r.platform===p));
+  if(present.length===0){ grid.innerHTML = '<div style="color:var(--muted2);font-size:13px;">No stale sales in this range.</div>'; return; }
+
+  grid.innerHTML = present.map(p=>{
+    const prows = rows.filter(r=>r.platform===p);
+    const units = prows.reduce((s,r)=>s+r.units_sold,0);
+    const revenue = prows.filter(r=>r.revenue!=null).reduce((s,r)=>s+r.revenue,0);
+    const isTikTok = p==='TikTok Shop';
+
+    const bucketUnits = {};
+    BUCKET_DEFS.forEach(b=>{ bucketUnits[b.key] = prows.filter(r=>r.bucket===b.key).reduce((s,r)=>s+r.units_sold,0); });
+    const total = Object.values(bucketUnits).reduce((a,b)=>a+b,0) || 1;
+
+    const strip = BUCKET_DEFS.map(b=>{
+      const pct = (bucketUnits[b.key]/total*100).toFixed(1);
+      return pct>0 ? `<span style="width:${pct}%;background:${b.color}"></span>` : '';
+    }).join('');
+
+    const labels = BUCKET_DEFS.map(b=>`<span><i class="dot" style="background:${b.color}"></i>${bucketUnits[b.key]}</span>`).join('');
+
+    return `
+      <div class="platform-card">
+        <div class="pname">${p}</div>
+        <div class="pmeta">
+          <div><div class="n">${units}</div><div class="l">stale units</div></div>
+          <div style="text-align:right"><div class="n">${isTikTok ? '—' : fmtMoney(revenue)}</div><div class="l">${isTikTok?'units only':'revenue'}</div></div>
+        </div>
+        <div class="aging-strip">
+          <div class="strip-bar">${strip}</div>
+          <div class="strip-labels">${labels}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function renderTrendChart(lastDate, platforms){
+  const panel = document.getElementById('chartPanel');
+  if(!lastDate){ return; }
+
+  if(typeof Chart === 'undefined'){
+    trendChartInstance = null;
+    panel.innerHTML = '<div style="color:var(--muted2);font-size:13px;padding:20px 0;">Chart library failed to load from the CDN (cdnjs.cloudflare.com) — an ad-blocker or network filter may be blocking it. Everything else on this page still works; try disabling extensions for this page or checking your network settings to get the trend chart back.</div>';
+    return;
+  }
+
+  // Rebuild the canvas fresh each time - don't assume it survived a prior fallback state
+  panel.innerHTML = '<canvas id="trendChart"></canvas>';
+  panel.style.height = '340px';
+
+  const rangeDays = currentRange === 0 ? [...new Set(RAW.map(r=>r.date))].sort().length : currentRange;
+  const allDates = [...new Set(RAW.map(r=>r.date))].sort();
+  const chartDates = currentRange === 0 ? allDates : allDates.slice(-rangeDays);
+
+  const present = platforms.filter(p => RAW.some(r=>r.platform===p));
+  const datasets = present.map(p=>({
+    label: p,
+    data: chartDates.map(d => RAW.filter(r=>r.date===d && r.platform===p).reduce((s,r)=>s+r.units_sold,0)),
+    borderColor: PLATFORM_COLORS[p] || '#999',
+    backgroundColor: 'transparent',
+    tension: 0.25,
+    pointRadius: 2,
+    borderWidth: 2,
+  }));
+
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  if(trendChartInstance) trendChartInstance.destroy();
+  trendChartInstance = new Chart(ctx, {
+    type:'line',
+    data:{ labels: chartDates, datasets },
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{
+        legend:{ labels:{color:'#8b909c', font:{family:'IBM Plex Mono', size:11}} },
+        tooltip:{ backgroundColor:'#1b1f26', borderColor:'#2a2f38', borderWidth:1, titleFont:{family:'IBM Plex Mono'}, bodyFont:{family:'IBM Plex Mono'} }
+      },
+      scales:{
+        x:{ ticks:{color:'#5f6470', font:{family:'IBM Plex Mono', size:10}}, grid:{color:'#2a2f38'} },
+        y:{ ticks:{color:'#5f6470', font:{family:'IBM Plex Mono', size:10}}, grid:{color:'#2a2f38'}, beginAtZero:true }
+      }
+    }
+  });
+}
+
+function renderBucketTable(rows, platforms){
+  const present = platforms.filter(p => rows.some(r=>r.platform===p));
+  const tbody = document.querySelector('#bucketTable tbody');
+  if(present.length===0){ tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--muted2)">No stale sales in this range.</td></tr>`; return; }
+
+  tbody.innerHTML = present.map(p=>{
+    const prows = rows.filter(r=>r.platform===p);
+    const b = {};
+    BUCKET_DEFS.forEach(def=>{ b[def.key] = prows.filter(r=>r.bucket===def.key).reduce((s,r)=>s+r.units_sold,0); });
+    const total = Object.values(b).reduce((a,c)=>a+c,0);
+    return `<tr>
+      <td style="text-align:left">${p}</td>
+      <td>${b.MONITOR||0}</td>
+      <td>${b.ACTION||0}</td>
+      <td>${b.DEEPER||0}</td>
+      <td>${b.LIQUIDATE||0}</td>
+      <td style="font-family:var(--mono);font-weight:600">${total}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderSkuTable(){
+  const lastDate = [...new Set(RAW.map(r=>r.date))].sort().pop();
+  const rows = rowsInRange(lastDate);
+  const filterPlatform = document.getElementById('platformFilter').value;
+
+  const filtered = filterPlatform==='ALL' ? rows : rows.filter(r=>r.platform===filterPlatform);
+
+  // aggregate by platform+sku+bucket
+  const agg = {};
+  filtered.forEach(r=>{
+    const k = r.platform+'|'+r.base_sku+'|'+r.bucket;
+    if(!agg[k]) agg[k] = {platform:r.platform, brand:r.brand, base_sku:r.base_sku, bucket:r.bucket, days_since_received:r.days_since_received, units_sold:0, revenue:0, hasRevenue:false};
+    agg[k].units_sold += r.units_sold;
+    if(r.revenue!=null){ agg[k].revenue += r.revenue; agg[k].hasRevenue = true; }
+    agg[k].days_since_received = Math.max(agg[k].days_since_received, r.days_since_received);
+  });
+  let list = Object.values(agg);
+
+  list.sort((a,b)=>{
+    const dir = skuSort.dir==='asc'?1:-1;
+    const av = a[skuSort.key], bv = b[skuSort.key];
+    if(typeof av === 'string') return av.localeCompare(bv)*dir;
+    return (av-bv)*dir;
+  });
+
+  const tbody = document.querySelector('#skuTable tbody');
+  if(list.length===0){ tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted2)">No rows for this selection.</td></tr>`; return; }
+
+  tbody.innerHTML = list.slice(0,50).map(r=>`
+    <tr>
+      <td style="text-align:left">${r.platform}</td>
+      <td style="text-align:left">${r.brand}</td>
+      <td style="text-align:left;font-family:var(--mono)">${r.base_sku}</td>
+      <td><span class="bucket-pill" style="background:${BUCKET_COLOR_HEX[r.bucket]}22;color:${BUCKET_COLOR_HEX[r.bucket]}">${r.bucket}</span></td>
+      <td>${r.days_since_received}</td>
+      <td style="font-family:var(--mono)">${r.units_sold}</td>
+      <td style="font-family:var(--mono)">${r.platform==='TikTok Shop' ? '—' : fmtMoney(r.revenue)}</td>
+    </tr>`).join('');
+}
+</script>
+</body>
+</html>
